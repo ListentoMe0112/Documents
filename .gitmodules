@@ -1,0 +1,3 @@
+[submodule "MathForRL"]
+	path = MathForRL
+	url = https://github.com/MathFoundationRL/Book-Mathematical-Foundation-of-Reinforcement-Learning.git
