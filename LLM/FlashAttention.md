@@ -124,41 +124,7 @@ Recall that $P_{i:} = softmax(S_{i:})$. Using the fact the Jacobian of $y = soft
 $$
     dS_{i:} = (diag(P_{i:}) - P_{i:}P_{i:}^T)dP_{i:} = P_{i:} \circ dP_{i:} - (P_{i:}^TdP_{i:})P_{i:}
 $$
-for example:
-$$
-\begin{align}
-dS_{1:} &= (\begin{bmatrix}
-P_{11} & 0 & 0 \\
-0 & P_{12} & 0 \\
-0 & 0 & P_{13}
-\end{bmatrix}
-- 
-\begin{bmatrix}
-P_{11} \\  P_{12} \\  P_{13}
-\end{bmatrix}
-\begin{bmatrix}
-P_{11} & P{12} & P{13}
-\end{bmatrix})dP_{i:}
-\\ &=(\begin{bmatrix}
-P_{11} & 0 & 0 \\
-0 & P_{12} & 0 \\
-0 & 0 & P_{13}
-\end{bmatrix}
--
-\begin{bmatrix}
-P_{11}^2 & P_{11}P_{12} & P_{11}P_{13} \\ 
-P_{11}P_{12} & P_{12}^2 & P_{12}P_{13} \\ 
-P_{11}P_{13} & P_{11}P_{12} & P_{13}^2 \\ 
-\end{bmatrix})dP_{i:}
-\\&=
-\begin{bmatrix}
-P_{11} - P_{11}^2 & -P_{11}P_{12} & -P_{11}P_{13} \\ 
--P_{11}P_{12} & P_{12} - P_{12}^2 & -P_{12}P_{13} \\ 
--P_{11}P_{13} & -P_{11}P_{12} & P_{13} - P_{13}^2 \\ 
-\end{bmatrix}
-dP_{i:}
-\end{align}
-$$
+
 
 # Deriviation of SoftMax
 $$
