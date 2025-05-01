@@ -1,0 +1,96 @@
+\documentclass{article}
+\usepackage{amssymb}
+\usepackage{amsmath}
+\usepackage{xcolor} 
+\usepackage[colorlinks=true]{hyperref}
+\newcommand{\redbox}[1]{%
+  \colorbox{red!20}{\hyperref[#1]{Eq.~(\ref*{#1})}}%
+}
+
+\title{FlashAttentionNote}
+\author{yeeboxie}
+\date{\today}
+\begin{document}
+
+\maketitle
+
+Translate flashattention from column first to row first.
+
+\section{Memory-efficient forward pass}
+
+
+Recall that given input sequences $Q, K, V \in \mathbb{R}^{N \times d}$, we want to compute the attention output $O \in \mathbb{R}^{N \times d}$:
+
+\begin{align*}
+S &= QK^T \in \mathbb{R}^{N \times N}, \\
+P &= \mathrm{softmax}(S) \in \mathbb{R}^{N \times N}, \\
+O &= PV \in \mathbb{R}^{N \times d}.
+\end{align*}
+
+We have that $S_{ij} = q_i k_j^T$ where $q_i$ and $k_j$ are the $i$-th and $j$-th rows of $Q$ and $K$ respectively. Define the normalization constants of softmax:
+
+\begin{equation}
+L_i = \sum_j e^{q_i k_j^T}. \label{eq:normalization}
+\end{equation}
+
+Let $v_j$ be the $j$-th row of $V$, then the $i$-th row of the output is:
+
+\begin{equation}
+    o_i = P_{i:}V = \sum_j P_{ij}v_j = \sum_j \frac{e^{q_i k_j^T}}{L_i}v_j \label{eq:oi}
+\end{equation}
+
+We see that once $L_{i}$ is computed, we can compute $o_{i}$ without extra memory by repeatedly summing $\frac{e^{q_i k_j^T}}{L_{i}}$. Therefore the forward pass can be computed with $O\left(n\right)$ extra memory.
+\begin{enumerate}
+    \item Compute $L_{i}$ for all $i$ according to \redbox{eq:normalization}, which takes $O\left(n\right)$ extra memory.
+    \item Compute $o_{i}$ for all $i$ according to \redbox{eq:oi}, which takes $O\left(d\right)$ extra memory.
+\end{enumerate}
+
+\section{Memory-efficient backward pass}
+We derive the backward pass of attention and show that it can also be computed with linear memory.  We instead derive the backward pass explicitly and show how it can be computed in a memory-efficient manner.
+
+Suppose that there is a scalar loss function $\phi$, and let the output gradient be $\mathbf{dO} \in \mathbb{R}^{n \times d}$ (where $\mathbf{dO}$ denotes $\frac{\partial \phi}{\partial \mathbf{O}}$). We want to compute the input gradients $\mathbf{dQ}$, $\mathbf{dK}$, $\mathbf{dV} \in \mathbb{R}^{n \times d}$ (where $\mathbf{dQ}$, $\mathbf{dK}$, $\mathbf{dV}$ denote $\frac{\partial \phi}{\partial \mathbf{Q}}$, $\frac{\partial \phi}{\partial \mathbf{K}}$, $\frac{\partial \phi}{\partial \mathbf{V}}$ respectively).
+
+The gradient $\mathbf{dV}$ is easy to see. Applying reverse-mode autodiff by hand (aka the chain rule), we obtain (in matrix notation) $\mathbf{dV} = \mathbf{P}^T \mathbf{dO}$. As:
+\begin{equation}
+    dv_j = \sum_i P_{ij} do_i = \sum_i \frac{e^{q_i k_j^T}}{L_i}do_i \label{eq:dvj}
+\end{equation}
+Since we already computed ${L_i}$, $dv_j$ can be computed without extra memory by repeated summing.
+
+The gradients $\mathbf{dQ}$ and $\mathbf{dK}$ are a little more complicated. We go through the gradients $\mathbf{dP}$ and $\mathbf{dS}$ first. From \redbox{eq:oi}, we have that $\mathbf{dP} = \mathbf{dO} \mathbf{V}^T$, and so:
+\begin{equation}
+    dP_{ij} = do_i v_j^T
+\end{equation}
+
+Recall that $P_{i:} = \mathrm{softmax}(S_i)$. Using the fact that the Jacobian of $y = \mathrm{softmax}(x)$ is $\mathrm{diag}(y) - yy^T$, we have that (This is column first, you need to tanspose this.)
+\begin{equation}
+    dS_{i:} = (\mathrm{diag}(P_{i:}) - P_{i:} P_{i:}^T) dP_{i:}=P_{i:} \circ dP_{i:} - (P_{i:}^T dP_{i:}) P_{i:}
+\end{equation}
+where $\circ$ denotes pointwise multiplication.
+
+Define
+\begin{equation}
+    D_i = P_{i:} dP_{i:}^T = \sum_j \frac{e^{q_i k_j^T}}{L_i} do_i v_j^T = do_i \sum_j \frac{e^{q_i k_j^T}}{L_i} v_j^T = do_i o_i^T \label{eq:dd}
+\end{equation}
+then
+\begin{equation}
+    dS_{ij} = P_{ij} dP_{ij} - D_i P_{ij}
+\end{equation}
+
+Now we can get the gradients $dQ$ and $dK$. Recall that $S_{ij} = q_i k_j^T$, so
+\begin{equation}
+    dq_i = \sum_j dS_{ij} k_j = \sum_j P_{ij} ( do_j v_j^T - D_i) k_j = \sum_j \frac{e^{q_i k_j^T}}{L_i} ( do_j v_j^T - D_i) k_j  \label{eq:dq}
+\end{equation}
+Similarly,
+\begin{equation}
+    dk_j = \sum_i dS_{ij} q_i = \sum_i P_{ij} ( do_j v_j^T - D_i) q_i = \sum_j \frac{e^{q_i k_j^T}}{L_i} ( do_j v_j^T - D_i) q_i \label{eq:dk}
+\end{equation}
+
+Therefore the backward pass can also be computed with $O(n)$ extra memory:
+\begin{enumerate}
+    \item Compute $dv_j$ for all j according to \redbox{eq:dvj}, which takes $O(d)$ extra memory;
+    \item Compute $D_i$ for all i according to \redbox{eq:dd}, which takes $O(n)$ extra memory;
+    \item Compute $dq_i$ for all i according to \redbox{eq:dq},which takes $O(d)$ extra memory;
+    \item Compute $dk_j$ for al j according to \redbox{eq:dk}, which takes $O(d)$ extra memory;
+\end{enumerate}
+\end{document}
+\end{article}
